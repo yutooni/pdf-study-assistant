@@ -244,7 +244,7 @@ function checkDomainPurity() {
 /**
  * @what Checks usecase layer has no external I/O dependencies
  * @why Usecase layer should orchestrate domain logic without direct I/O
- * @failure Usecase contains express, process.env, fetch, or axios
+ * @failure Usecase contains express, process.env, fetch, axios, or crypto.randomUUID
  */
 function checkUsecasePurity() {
   const usecaseDir = join(srcDir, 'usecase');
@@ -263,6 +263,7 @@ function checkUsecasePurity() {
     { pattern: /\bfetch\(/, description: 'fetch' },
     { pattern: /from ['"]axios['"]/, description: 'axios' },
     { pattern: /require\(['"]axios['"]\)/, description: 'axios' },
+    { pattern: /crypto\.randomUUID\(\)/, description: 'crypto.randomUUID()' },
   ];
 
   for (const file of files) {
@@ -331,15 +332,24 @@ function checkOpenAPIConsistency() {
     routerRoutes.add(`${method} ${path}`);
   }
 
+  // Normalize route paths: convert Express :param to OpenAPI {param}
+  function normalizeRoute(route) {
+    return route.replace(/:(\w+)/g, '{$1}');
+  }
+
+  const normalizedRouterRoutes = new Set(
+    Array.from(routerRoutes).map(normalizeRoute)
+  );
+
   // Check OpenAPI -> Router
   for (const route of openapiRoutes) {
-    if (!routerRoutes.has(route)) {
+    if (!normalizedRouterRoutes.has(route)) {
       errors.push(`OpenAPI defines ${route} but it's not implemented in router`);
     }
   }
 
   // Check Router -> OpenAPI
-  for (const route of routerRoutes) {
+  for (const route of normalizedRouterRoutes) {
     if (!openapiRoutes.has(route)) {
       errors.push(`Router implements ${route} but it's not documented in OpenAPI`);
     }
